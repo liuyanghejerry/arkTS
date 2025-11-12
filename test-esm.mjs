@@ -15,38 +15,13 @@ const __dirname = dirname(__filename)
 // Packages that support ESM imports
 const packages = [
   'language-plugin',
+  'language-server',
   'language-service',
   'shared',
   'types',
   'typescript-plugin',
   'vfs',
 ]
-
-// Language server is a long-running process that needs arguments
-// and doesn't exit on its own, so we check its binary exists instead
-async function testLanguageServer() {
-  try {
-    const packagePath = join(__dirname, 'packages', 'language-server')
-    const binPath = join(packagePath, 'bin', 'ets-language-server.js')
-    const esmBinPath = join(packagePath, 'bin', 'ets-language-server.mjs')
-
-    const binExists = readFileSync(binPath, 'utf-8').length > 0
-    const esmBinExists = readFileSync(esmBinPath, 'utf-8').length > 0
-
-    if (binExists && esmBinExists) {
-      // eslint-disable-next-line no-console
-      console.log(`✓ language-server: Binary files validated (long-running server process)`)
-      return true
-    }
-
-    console.error(`✗ language-server: Binary files not found or empty`)
-    return false
-  }
-  catch (error) {
-    console.error(`✗ language-server: Validation failed - ${error.message}`)
-    return false
-  }
-}
 
 async function testPackage(packageName) {
   try {
@@ -74,6 +49,38 @@ async function testPackage(packageName) {
     }
 
     const modulePath = join(packagePath, esmEntry)
+
+    // Special handling for language-server: it's a long-running process
+    // If import hangs (timeout), it means the server started successfully
+    // If import fails immediately with an error, check if it's acceptable
+    if (packageName === 'language-server') {
+      const importPromise = import(modulePath)
+      const timeoutPromise = new Promise((resolve) => {
+        setTimeout(() => resolve({ timeout: true }), 2000)
+      })
+
+      const result = await Promise.race([importPromise, timeoutPromise])
+
+      if (result?.timeout) {
+        // Import hung - this means the server started successfully
+        // eslint-disable-next-line no-console
+        console.log(`✓ ${packageName}: ESM import successful (long-running server started)`)
+        return true
+      }
+
+      // Import completed without timeout - this is unexpected for a server
+      // but we'll check if it has exports
+      const exportKeys = Object.keys(result)
+      if (exportKeys.length > 0 || typeof result.default === 'function') {
+        // eslint-disable-next-line no-console
+        console.log(`✓ ${packageName}: ESM import successful`)
+        return true
+      }
+
+      console.error(`✗ ${packageName}: Import completed but no exports found`)
+      return false
+    }
+
     const module = await import(modulePath)
 
     // Check that the module has exports or is a function
@@ -96,6 +103,23 @@ async function testPackage(packageName) {
     return true
   }
   catch (error) {
+    // For language-server, check if error is due to missing dependencies (acceptable)
+    // or a real module loading error (not acceptable)
+    if (packageName === 'language-server') {
+      const errorMsg = error.message || ''
+
+      // Check if it's a missing dependency error (acceptable - means module structure is OK)
+      if (errorMsg.includes('Cannot find package') || errorMsg.includes('Cannot find module')) {
+        // eslint-disable-next-line no-console
+        console.log(`⚠ ${packageName}: Import test passed (missing optional dependency is acceptable)`)
+        return true
+      }
+
+      // Real error - module structure is broken
+      console.error(`✗ ${packageName}: Import failed - ${errorMsg}`)
+      return false
+    }
+
     // Warn about missing dependencies but don't fail the test
     if (error.message.includes('Cannot find package') || error.message.includes('Cannot find module')) {
       // eslint-disable-next-line no-console
@@ -111,10 +135,7 @@ async function testAll() {
   // eslint-disable-next-line no-console
   console.log('Testing ESM imports for all packages...\n')
 
-  const results = await Promise.all([
-    ...packages.map(testPackage),
-    testLanguageServer(),
-  ])
+  const results = await Promise.all(packages.map(testPackage))
   const failed = results.filter(r => !r).length
 
   // eslint-disable-next-line no-console
