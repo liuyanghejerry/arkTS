@@ -11,13 +11,38 @@ const process = require('node:process')
 // Packages that support CJS require
 const packages = [
   'language-plugin',
-  'language-server',
   'language-service',
   'shared',
   'types',
   'typescript-plugin',
   'vfs',
 ]
+
+// Language server is a long-running process that needs arguments
+// and doesn't exit on its own, so we check its binary exists instead
+async function testLanguageServer() {
+  try {
+    const packagePath = join(__dirname, 'packages', 'language-server')
+    const binPath = join(packagePath, 'bin', 'ets-language-server.js')
+    const esmBinPath = join(packagePath, 'bin', 'ets-language-server.mjs')
+
+    const binExists = existsSync(binPath) && readFileSync(binPath, 'utf-8').length > 0
+    const esmBinExists = existsSync(esmBinPath) && readFileSync(esmBinPath, 'utf-8').length > 0
+
+    if (binExists && esmBinExists) {
+      // eslint-disable-next-line no-console
+      console.log(`✓ language-server: Binary files validated (long-running server process)`)
+      return true
+    }
+
+    console.error(`✗ language-server: Binary files not found or empty`)
+    return false
+  }
+  catch (error) {
+    console.error(`✗ language-server: Validation failed - ${error.message}`)
+    return false
+  }
+}
 
 // VSCode package has a different test (build artifact check)
 async function testVscodePackage() {
@@ -113,6 +138,7 @@ async function testAll() {
 
   const results = await Promise.all([
     ...packages.map(testPackage),
+    testLanguageServer(),
     testVscodePackage(),
   ])
 
