@@ -108,19 +108,11 @@ async function testPackage(packageName) {
             resolve(true)
           }
           else {
-            // Check if it's a known issue with missing initializeWorkspace function
-            if (stderr.includes('initializeWorkspace is not defined')) {
-              // eslint-disable-next-line no-console
-              console.log(`⚠ ${packageName}: Demo has known issue but module structure is OK`)
-              resolve(true)
+            console.error(`✗ ${packageName}: Demo exited with code ${code}`)
+            if (stderr) {
+              console.error(`  stderr: ${stderr.slice(0, 200)}`)
             }
-            else {
-              console.error(`✗ ${packageName}: Demo exited with code ${code}`)
-              if (stderr) {
-                console.error(`  stderr: ${stderr.slice(0, 200)}`)
-              }
-              resolve(false)
-            }
+            resolve(false)
           }
         })
 

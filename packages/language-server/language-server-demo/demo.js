@@ -180,7 +180,7 @@ async function demonstrateProtocol() {
   logger.section('📚 LSP 协议通信演示')
 
   // 初始化工作区
-  const workspaceRoot = initializeWorkspace()
+  const workspaceRoot = config.workspaceRoot
 
   logger.section('📋 1. Initialize 请求')
   logger.info('客户端发送 initialize 请求，包含客户端能力和工作区信息')
@@ -279,7 +279,18 @@ async function demonstrateProtocol() {
   logger.info('客户端通知服务器打开了一个文档')
 
   const sampleFile = path.join(workspaceRoot, 'sample.ets')
-  const fileContent = fs.readFileSync(sampleFile, 'utf8')
+  // Use example content for protocol demonstration
+  const fileContent = `@Entry
+@Component
+struct Index {
+  @State message: string = 'Hello ArkTS'
+
+  build() {
+    Column() {
+      Text(this.message)
+    }
+  }
+}`
 
   const didOpenNotification = {
     jsonrpc: '2.0',
